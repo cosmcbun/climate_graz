@@ -1,9 +1,11 @@
 """
 Calculate climatologies (1991–2020 reference) and monthly anomalies. Show the timeline of summer anomalies for Graz.
-Which were the 5 hottest years? Mark them in the plot. Do the same for the three given parameters. Compute monthly anomalies as follows:
-1. Compute the average, climatological monthly values for each month of the year, i.e. the mean January, mean February and so on.
-Choose the climate normal period 1991-2020 to compute those means.
-2. To compute the anomalies, you now need to subtract from each monthly value of the time series the corresponding mean, climatological value.
+Which were the 5 hottest years? Mark them in the plot. Do the same for the three given parameters.
+Compute monthly anomalies as follows:
+1. Compute the average, climatological monthly values for each month of the year, i.e. the mean January,
+mean February and so on. Choose the climate normal period 1991-2020 to compute those means.
+2. To compute the anomalies, you now need to subtract from each monthly value of the time series the corresponding mean,
+climatological value.
 
 Plot the median, and the interquartile and interdecile range, for the mean, min, and max temperature of the whole time
 period for each month, and include the current year, the year 2023 and 2024, and your birth year.
@@ -112,14 +114,15 @@ def render_deciles_quartiles_median(monthly_stats: pd.DataFrame, months, ax, var
     ax.grid(alpha=0.3)
     ax.legend(loc="upper left")
 
-def generate_graph_two(dataframe: pd.DataFrame, birth_year: str, export_name="Hot days and Tropical nights.png"):
+
+def generate_graph_two(dataframe: pd.DataFrame, birth_year: str, export_name="Monthly Temperature Distributions.png"):
     RANGE_START = "2023-01-01"
     df_after_2023 = dataframe[RANGE_START:]
     df_birth_year = dataframe[f"{birth_year}-01-01":f"{birth_year}-12-31"]
     df_date_restricted = pd.concat([df_after_2023, df_birth_year])
 
     DESIRED_STATISTICS = ['median', lambda x: x.quantile(0.25), lambda x: x.quantile(0.75),
-                      lambda x: x.quantile(0.10), lambda x: x.quantile(0.90)]
+                          lambda x: x.quantile(0.10), lambda x: x.quantile(0.90)]
     VARIABLES = ['tl_mittel', 'tlmin', 'tlmax']
     DESIRED_STATISTIC_NAMES = ['median', 'p25', 'p75', 'p10', 'p90']
     # Group by month number (1–12)
@@ -151,18 +154,13 @@ def generate_graph_two(dataframe: pd.DataFrame, birth_year: str, export_name="Ho
     plt.savefig(export_name)
 
 
-def generate_graph_three(dataframe: pd.DataFrame, export_name="Monthly Temperature Distributions.png"):
+def generate_graph_three(dataframe: pd.DataFrame, export_name="Hot days and Tropical nights.png"):
     # Phase 3: Hot and cold days
     VARIABLES = ['tlmax', 'tlmin']
     THRESHOLD_TEMPS = [30, 20]
-    d1 = {
-        "tlmax": [lambda x: (x >= 30).sum()],
-        "tlmin": [lambda x: (x >= 20).sum()]
-    }
-    d2 = {var: [lambda x, t=temp: (x >= t).sum()] for var, temp in zip(VARIABLES, THRESHOLD_TEMPS)}
-
-    for var, temp in zip(VARIABLES, THRESHOLD_TEMPS): print(var, temp)
-    annual_stats = dataframe.groupby(dataframe.index.year).agg(d2)
+    variables_to_threshold_functions = {var: [lambda x, t=temp: (x >= t).sum()]
+                                        for var, temp in zip(VARIABLES, THRESHOLD_TEMPS)}
+    annual_stats = dataframe.groupby(dataframe.index.year).agg(variables_to_threshold_functions)
     annual_stats.columns = pd.MultiIndex.from_product(
         [['hot_days', 'tropical_nights']]
     )
@@ -178,9 +176,10 @@ def generate_graph_three(dataframe: pd.DataFrame, export_name="Monthly Temperatu
     plt.grid(True, alpha=0.3)
     plt.savefig(export_name)
 
+
 CLIMATE_DATA_CSV_LOCATION = "Messstationen_Graz_Tagesdaten_v2_Datensatz_19220101_20251031.csv"
 df = get_climate_data(CLIMATE_DATA_CSV_LOCATION)
 
-#generate_graph_one(df, "Anomalies from 1991 to 2020.png")
-#generate_graph_two(df, "2002", "Monthly Temperature Distributions.png")
-generate_graph_three(df, "Monthly Temperature Distributions.png")
+generate_graph_one(df, "Anomalies from 1991 to 2020.png")
+generate_graph_two(df, "2002", "Monthly Temperature Distributions.png")
+generate_graph_three(df, "Hot days and Tropical nights.png")
