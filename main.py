@@ -15,57 +15,83 @@ of hot days and tropical nights in a timeline.
 import pandas as pd
 import matplotlib.pyplot as plt
 
-df = pd.read_csv("Messstationen_Graz_Tagesdaten_v2_Datensatz_19220101_20251031.csv")
-df["time"] = pd.to_datetime(df.time)
-df = df.set_index("time")
 
-# Phase one: Climatologies
-df_date_restricted = df["1991-01-01":"2020-12-31"]
-yearly_means = df_date_restricted.groupby(df_date_restricted.index.year).mean().dropna()
-
-# Get mean value for each month (climatology)
-df_clim = df_date_restricted["1991-01":"2020-12"]
-clim = df_clim.groupby(df_clim.index.month).mean()
-clim.index.name = "month"
-
-# Then: monthly means, and subtract climatology of each month from the monthly means to get monthly anomalies.
-monthly_means = df_date_restricted.groupby([df_date_restricted.index.year, df_date_restricted.index.month]).mean()
-monthly_means.index.names = ["year", "month"]
-
-anom = monthly_means - clim
-
-series = anom["tl_mittel"]
-
-# Step 1 — Compute mean anomaly per year
-mean_anom_per_year = series.groupby(level="year").mean()
-
-# Step 2 — Find the 5 hottest years
-hottest_years = mean_anom_per_year.nlargest(5).index
-
-# Step 3 — Convert MultiIndex (year, month) to a proper datetime index for plotting
-# Here we assume each data point is monthly, e.g. end of month
-time_index = [pd.Timestamp(year=int(y), month=int(m), day=15) for y, m in series.index]
-series.index = pd.DatetimeIndex(time_index)
-
-# Step 4 — Plot timeline and highlight hottest years
-plt.figure(figsize=(12,6))
-plt.plot(series.index, series.values, color="lightgray", linewidth=1.5, label="_nolegend_")
-
-for year in hottest_years:
-    mask = series.index.year == year
-    plt.plot(series.index[mask], series[mask], color="red", linewidth=2.5, label=str(year))
-
-plt.title("Monthly Temperature Anomalies (1991–2020 baseline)")
-plt.xlabel("Year")
-plt.ylabel("Temperature Anomaly (°C)")
-plt.legend(title="Top 5 Hottest Years")
-plt.grid(True, alpha=0.3)
-plt.savefig("Anomalies from 1991 to 2020.png")
+def get_climate_data(csv_loc: str) -> pd.DataFrame:
+    climate_data = pd.read_csv(csv_loc)
+    climate_data["time"] = pd.to_datetime(climate_data.time)
+    climate_data = climate_data.set_index("time")
+    return climate_data
 
 
+def restrict_dataframe_dates(dataframe, range_start, range_end):
+    return dataframe[range_start:range_end]
+
+
+def get_monthly_aggregates(dataframe: pd.DataFrame) -> pd.DataFrame:
+    clim = dataframe.groupby(dataframe.index.month).mean()
+    clim.index.name = "month"
+    return clim
+
+
+def get_monthly_means(dataframe: pd.DataFrame) -> pd.DataFrame:
+    monthly_means = dataframe.groupby([dataframe.index.year, dataframe.index.month]).mean()
+    monthly_means.index.names = ["year", "month"]
+    return monthly_means
+
+
+def get_hottest_years(dataframe: pd.DataFrame, year_count: int) -> pd.DataFrame:
+    # Step 1 — Compute mean anomaly per year
+    mean_anom_per_year = dataframe.groupby(level="year").mean()
+
+    # Step 2 — Find the 5 hottest years
+    return mean_anom_per_year.nlargest(year_count).index
+
+
+def index_for_plotting(monthly_anomalies: pd.DataFrame) -> pd.DataFrame:
+    # Step 3 — Convert MultiIndex (year, month) to a proper datetime index for plotting
+    # Here we assume each data point is monthly, e.g. end of month
+    time_index = [pd.Timestamp(year=int(y), month=int(m), day=15) for y, m in monthly_anomalies.index]
+    monthly_anomalies.index = pd.DatetimeIndex(time_index)
+    return monthly_anomalies
+
+
+def plot_average_years(monthly_anomalies: pd.DataFrame) -> None:
+    plt.plot(monthly_anomalies.index, monthly_anomalies.values, color="lightgray", linewidth=1.5, label="_nolegend_")
+
+
+def plot_hottest_years(monthly_anomalies: pd.DataFrame, hottest_years) -> None:
+    for year in hottest_years:
+        mask = monthly_anomalies.index.year == year
+        plt.plot(monthly_anomalies.index[mask], monthly_anomalies[mask], color="red", linewidth=2.5, label=str(year))
+
+
+def generate_graph_one(dataframe: pd.DataFrame, export_name="Anomalies from 1991 to 2020.png"):
+    RANGE_START, RANGE_END = "1991-01-01", "2020-12-31"
+    df_date_restricted = restrict_dataframe_dates(dataframe, RANGE_START, RANGE_END)
+
+    all_monthly_anomalies = get_monthly_means(df_date_restricted) - get_monthly_aggregates(df_date_restricted)
+    monthly_anomalies = all_monthly_anomalies["tl_mittel"]
+    hottest_years = get_hottest_years(monthly_anomalies, 5)
+
+    monthly_anomalies = index_for_plotting(monthly_anomalies)
+
+    plt.figure(figsize=(12, 6))
+    plot_average_years(monthly_anomalies)
+    plot_hottest_years(monthly_anomalies, hottest_years)
+    plt.title("Monthly Temperature Anomalies (1991–2020 baseline)")
+    plt.xlabel("Year")
+    plt.ylabel("Temperature Anomaly (°C)")
+    plt.legend(title="Top 5 Hottest Years")
+    plt.grid(True, alpha=0.3)
+
+    plt.savefig(export_name)
 
 
 
+CLIMATE_DATA_CSV_LOCATION = "Messstationen_Graz_Tagesdaten_v2_Datensatz_19220101_20251031.csv"
+df = get_climate_data(CLIMATE_DATA_CSV_LOCATION)
+
+generate_graph_one(df, "Anomalies from 1991 to 2020.png")
 
 
 # Phase two: medians
