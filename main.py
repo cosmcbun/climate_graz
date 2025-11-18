@@ -83,7 +83,6 @@ def generate_graph_one(dataframe: pd.DataFrame, export_name="Anomalies from 1991
     plt.savefig(export_name)
 
 
-
 def render_deciles_quartiles_median(monthly_stats: pd.DataFrame, months, ax, var, title, color) -> None:
     # Interdecile (10–90%)
     ax.fill_between(
@@ -113,7 +112,7 @@ def render_deciles_quartiles_median(monthly_stats: pd.DataFrame, months, ax, var
     ax.grid(alpha=0.3)
     ax.legend(loc="upper left")
 
-def generate_graph_two(dataframe: pd.DataFrame, birth_year: str, export_name="Monthly Temperature Distributions.png"):
+def generate_graph_two(dataframe: pd.DataFrame, birth_year: str, export_name="Hot days and Tropical nights.png"):
     RANGE_START = "2023-01-01"
     df_after_2023 = dataframe[RANGE_START:]
     df_birth_year = dataframe[f"{birth_year}-01-01":f"{birth_year}-12-31"]
@@ -148,35 +147,40 @@ def generate_graph_two(dataframe: pd.DataFrame, birth_year: str, export_name="Mo
     axes[-1].set_xticklabels(MONTH_LABELS)
 
     plt.suptitle(f"Monthly Temperature Distributions ({birth_year} and 2023-2025 baseline)", fontsize=15)
-    plt.tight_layout(rect=(0.0, 0.0, 1.0, 0.97))
+    plt.tight_layout(rect=(0.0, 0.0, 0.99, 1))
     plt.savefig(export_name)
 
+
+def generate_graph_three(dataframe: pd.DataFrame, export_name="Monthly Temperature Distributions.png"):
+    # Phase 3: Hot and cold days
+    VARIABLES = ['tlmax', 'tlmin']
+    THRESHOLD_TEMPS = [30, 20]
+    d1 = {
+        "tlmax": [lambda x: (x >= 30).sum()],
+        "tlmin": [lambda x: (x >= 20).sum()]
+    }
+    d2 = {var: [lambda x, t=temp: (x >= t).sum()] for var, temp in zip(VARIABLES, THRESHOLD_TEMPS)}
+
+    for var, temp in zip(VARIABLES, THRESHOLD_TEMPS): print(var, temp)
+    annual_stats = dataframe.groupby(dataframe.index.year).agg(d2)
+    annual_stats.columns = pd.MultiIndex.from_product(
+        [['hot_days', 'tropical_nights']]
+    )
+
+    plt.figure()
+    plt.plot(annual_stats.index, annual_stats.hot_days, color="red", linewidth=1.5, label="Hot Days")
+    plt.plot(annual_stats.index, annual_stats.tropical_nights, color="blue", linewidth=1.5, label="Tropical Nights")
+
+    plt.title("Hot days and Tropical nights by year")
+    plt.xlabel("Year")
+    plt.ylabel("Hot Times")
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.savefig(export_name)
 
 CLIMATE_DATA_CSV_LOCATION = "Messstationen_Graz_Tagesdaten_v2_Datensatz_19220101_20251031.csv"
 df = get_climate_data(CLIMATE_DATA_CSV_LOCATION)
 
-generate_graph_one(df, "Anomalies from 1991 to 2020.png")
-
-generate_graph_two(df, "2002", "Monthly Temperature Distributions.png")
-
-
-# Phase 3: Hot and cold days
-
-annual_stats = df.groupby(df.index.year).agg({
-    "tlmax": [lambda x: (x >= 30).sum()],
-    "tlmin": [lambda x: (x >= 20).sum()]
-})
-annual_stats.columns = pd.MultiIndex.from_product(
-    [['hot_days', 'tropical_nights']]
-)
-
-plt.figure()
-plt.plot(annual_stats.index, annual_stats.hot_days, color="red", linewidth=1.5, label="Hot Days")
-plt.plot(annual_stats.index, annual_stats.tropical_nights, color="blue", linewidth=1.5, label="Tropical Nights")
-
-plt.title("Hot days and Tropical nights by year")
-plt.xlabel("Year")
-plt.ylabel("Hot Times")
-plt.legend()
-plt.grid(True, alpha=0.3)
-plt.savefig("Hot days and Tropical nights.png")
+#generate_graph_one(df, "Anomalies from 1991 to 2020.png")
+#generate_graph_two(df, "2002", "Monthly Temperature Distributions.png")
+generate_graph_three(df, "Monthly Temperature Distributions.png")
