@@ -23,10 +23,6 @@ def get_climate_data(csv_loc: str) -> pd.DataFrame:
     return climate_data
 
 
-def restrict_dataframe_dates(dataframe, range_start, range_end):
-    return dataframe[range_start:range_end]
-
-
 def get_monthly_aggregates(dataframe: pd.DataFrame) -> pd.DataFrame:
     clim = dataframe.groupby(dataframe.index.month).mean()
     clim.index.name = "month"
@@ -67,7 +63,7 @@ def plot_hottest_years(monthly_anomalies: pd.DataFrame, hottest_years) -> None:
 
 def generate_graph_one(dataframe: pd.DataFrame, export_name="Anomalies from 1991 to 2020.png"):
     RANGE_START, RANGE_END = "1991-01-01", "2020-12-31"
-    df_date_restricted = restrict_dataframe_dates(dataframe, RANGE_START, RANGE_END)
+    df_date_restricted = dataframe[RANGE_START:RANGE_END]
 
     all_monthly_anomalies = get_monthly_means(df_date_restricted) - get_monthly_aggregates(df_date_restricted)
     monthly_anomalies = all_monthly_anomalies["tl_mittel"]
@@ -88,45 +84,7 @@ def generate_graph_one(dataframe: pd.DataFrame, export_name="Anomalies from 1991
 
 
 
-CLIMATE_DATA_CSV_LOCATION = "Messstationen_Graz_Tagesdaten_v2_Datensatz_19220101_20251031.csv"
-df = get_climate_data(CLIMATE_DATA_CSV_LOCATION)
-
-generate_graph_one(df, "Anomalies from 1991 to 2020.png")
-
-
-# Phase two: medians
-
-df_custom_years = pd.concat([df["2002-01-01":"2002-12-31"], df["2023-01-01":]])
-
-
-# Group by month number (1–12)
-monthly_stats = df_custom_years.groupby(df_custom_years.index.month).agg({
-    "tl_mittel": ['median', lambda x: x.quantile(0.25), lambda x: x.quantile(0.75),
-                  lambda x: x.quantile(0.10), lambda x: x.quantile(0.90)],
-    "tlmin":    ['median', lambda x: x.quantile(0.25), lambda x: x.quantile(0.75),
-                  lambda x: x.quantile(0.10), lambda x: x.quantile(0.90)],
-    "tlmax":    ['median', lambda x: x.quantile(0.25), lambda x: x.quantile(0.75),
-                  lambda x: x.quantile(0.10), lambda x: x.quantile(0.90)]
-})
-
-# Clean up the column names
-monthly_stats.columns = pd.MultiIndex.from_product(
-    [['tl_mittel', 'tlmin', 'tlmax'],
-     ['median', 'p25', 'p75', 'p10', 'p90']]
-)
-monthly_stats.index.name = 'month'
-
-# Time to start displaying
-months = range(1, 13)
-month_labels = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
-
-# Create 3 subplots (min, mean, max)
-fig, axes = plt.subplots(3, 1, figsize=(10, 12), sharex=True)
-variables = ['tlmin', 'tl_mittel', 'tlmax']
-titles = ['Minimum Temperature', 'Mean Temperature', 'Maximum Temperature']
-colors = ['blue', 'green', 'red']  # blue, orange, red
-
-for ax, var, title, color in zip(axes, variables, titles, colors):
+def render_deciles_quartiles_median(monthly_stats: pd.DataFrame, months, ax, var, title, color) -> None:
     # Interdecile (10–90%)
     ax.fill_between(
         months,
@@ -155,16 +113,51 @@ for ax, var, title, color in zip(axes, variables, titles, colors):
     ax.grid(alpha=0.3)
     ax.legend(loc="upper left")
 
-# Shared x-axis
-axes[-1].set_xlabel("Month")
-axes[-1].set_xticks(months)
-axes[-1].set_xticklabels(month_labels)
+def generate_graph_two(dataframe: pd.DataFrame, birth_year: str, export_name="Monthly Temperature Distributions.png"):
+    RANGE_START = "2023-01-01"
+    df_after_2023 = dataframe[RANGE_START:]
+    df_birth_year = dataframe[f"{birth_year}-01-01":f"{birth_year}-12-31"]
+    df_date_restricted = pd.concat([df_after_2023, df_birth_year])
 
-plt.suptitle("Monthly Temperature Distributions (1991–2020 baseline)", fontsize=15)
-plt.tight_layout(rect=(0.0, 0.0, 1.0, 0.97))
-plt.savefig("Monthly Temperature Distributions.png")
+    DESIRED_STATISTICS = ['median', lambda x: x.quantile(0.25), lambda x: x.quantile(0.75),
+                      lambda x: x.quantile(0.10), lambda x: x.quantile(0.90)]
+    VARIABLES = ['tl_mittel', 'tlmin', 'tlmax']
+    DESIRED_STATISTIC_NAMES = ['median', 'p25', 'p75', 'p10', 'p90']
+    # Group by month number (1–12)
+    statistics_for_each_variable = {var: DESIRED_STATISTICS for var in VARIABLES}
+    monthly_stats = df_date_restricted.groupby(df_date_restricted.index.month).agg(statistics_for_each_variable)
+
+    # Clean up the column names
+    monthly_stats.columns = pd.MultiIndex.from_product([VARIABLES, DESIRED_STATISTIC_NAMES])
+    monthly_stats.index.name = 'month'
+
+    # Create 3 subplots (min, mean, max)
+    fig, axes = plt.subplots(3, 1, figsize=(10, 12), sharex=True)
+    TITLES = ['Mean Temperature', 'Minimum Temperature', 'Maximum Temperature']
+    COLORS = ['green', 'blue', 'red']
+
+    MONTHS = range(1, 13)
+    for ax, var, title, color in zip(axes, VARIABLES, TITLES, COLORS):
+        render_deciles_quartiles_median(monthly_stats, MONTHS, ax, var, title, color)
+
+    # Shared x-axis
+    axes[-1].set_xlabel("Month")
+    axes[-1].set_xticks(MONTHS)
+
+    MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    axes[-1].set_xticklabels(MONTH_LABELS)
+
+    plt.suptitle(f"Monthly Temperature Distributions ({birth_year} and 2023-2025 baseline)", fontsize=15)
+    plt.tight_layout(rect=(0.0, 0.0, 1.0, 0.97))
+    plt.savefig(export_name)
 
 
+CLIMATE_DATA_CSV_LOCATION = "Messstationen_Graz_Tagesdaten_v2_Datensatz_19220101_20251031.csv"
+df = get_climate_data(CLIMATE_DATA_CSV_LOCATION)
+
+generate_graph_one(df, "Anomalies from 1991 to 2020.png")
+
+generate_graph_two(df, "2002", "Monthly Temperature Distributions.png")
 
 
 # Phase 3: Hot and cold days
